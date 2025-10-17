@@ -36,16 +36,13 @@ void app_main(void)
         .resp_buf_len = sizeof(resp_buf),
         .req_buf = req_buf,
         .resp_buf = resp_buf,
-        .srv_tbl_len = 2,
+        .srv_tbl_len = 0,
         .srv_tbl_stg = srv_tbl_stg,
     };
     esp_amp_rpc_server_t server = esp_amp_rpc_server_init(&cfg);
     assert(server != NULL);
     printf("rpc server init successfully\n");
 
-    /* add services */
-    assert(esp_amp_rpc_server_add_service(server, RPC_CMD_ID_ADD, rpc_cmd_handler_add) == 0);
-    assert(esp_amp_rpc_server_add_service(server, RPC_CMD_ID_PRINTF, rpc_cmd_handler_printf) == 0);
 
     /* Load firmware & start subcore */
     const esp_partition_t *sub_partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, 0x40, NULL);

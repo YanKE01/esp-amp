@@ -41,3 +41,6 @@ sdkconfig.old
 # pytest
 *.pyc
 __pycache__
+
+
+.vscode/
