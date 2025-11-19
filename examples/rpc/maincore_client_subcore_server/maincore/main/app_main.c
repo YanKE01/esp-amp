@@ -31,7 +31,7 @@ static void cmd_add_cb(esp_amp_rpc_client_t client, esp_amp_rpc_cmd_t *cmd, void
 }
 
 /* blocking demo with response */
-static int rpc_cmd_add(esp_amp_rpc_client_t client, int a, int b, int *ret)
+static int rpc_cmd_add(esp_amp_rpc_client_t client, int a, int b, int *ret, uint32_t timeout_ms)
 {
     /* construct request data */
     add_params_in_t in_params = {
@@ -53,12 +53,17 @@ static int rpc_cmd_add(esp_amp_rpc_client_t client, int a, int b, int *ret)
 
     int err = esp_amp_rpc_client_execute_cmd(client, &cmd);
     if (err == ESP_AMP_RPC_OK) {
-        ulTaskNotifyTake(true, pdMS_TO_TICKS(1000)); /* wait up to 1000ms */
-        if (cmd.status == ESP_AMP_RPC_STATUS_OK) {
-            *ret = out_params.ret;
+        if (ulTaskNotifyTake(true, pdMS_TO_TICKS(timeout_ms)) == 0) { /* wait up to timeout_ms */
+             esp_amp_rpc_client_abort_cmd(client, &cmd); /* abort command if timeout */
+             printf("client: rpc cmd add timeout\n");
+             err = ESP_AMP_RPC_ERR_TIMEOUT;
         } else {
-            printf("client: rpc cmd failed, status: %x\n", cmd.status);
-            err = ESP_AMP_RPC_FAIL;
+            if (cmd.status == ESP_AMP_RPC_STATUS_OK) {
+                *ret = out_params.ret;
+            } else {
+                printf("client: rpc cmd add failed, status: %x\n", cmd.status);
+                err = ESP_AMP_RPC_FAIL;
+            }
         }
     }
     return err;
@@ -112,7 +117,7 @@ static void client(void *args)
         int a = i + client_id * 10000;
         int b = client_id * 10000 + i + 1;
         int ret = 0;
-        int err = rpc_cmd_add(client, a, b, &ret);
+        int err = rpc_cmd_add(client, a, b, &ret, 1000);
         if (err != ESP_AMP_RPC_OK) {
             printf("client(%d): rpc cmd add exec failed\n", client_id);
         } else {
