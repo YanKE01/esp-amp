@@ -29,10 +29,10 @@ extern "C" {
 
 /* Definitions for command status */
 #define ESP_AMP_RPC_STATUS_OK           0x0000  /* command executed successfully */
-#define ESP_AMP_RPC_STATUS_SERVER_BUSY  0xffff  /* server is busy */
-#define ESP_AMP_RPC_STATUS_INVALID_CMD  0xfffe  /* invalid cmd id */
-#define ESP_AMP_RPC_STATUS_EXEC_FAILED  0xfffd  /* server failed to execute command */
-#define ESP_AMP_RPC_STATUS_PENDING      0xfffc  /* command is pending, timeout */
+#define ESP_AMP_RPC_STATUS_SERVER_BUSY  0x0001  /* server is busy */
+#define ESP_AMP_RPC_STATUS_INVALID_CMD  0x0002  /* invalid cmd id */
+#define ESP_AMP_RPC_STATUS_EXEC_FAILED  0x0003  /* server failed to execute command */
+#define ESP_AMP_RPC_STATUS_PENDING      0x0004  /* command is pending, timeout */
 
 typedef void *esp_amp_rpc_server_t;
 typedef void *esp_amp_rpc_client_t;
