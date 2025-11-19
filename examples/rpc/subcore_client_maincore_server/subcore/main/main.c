@@ -7,7 +7,6 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <stdatomic.h>
 #include <string.h>
 #include "esp_amp.h"
 #include "esp_amp_platform.h"
@@ -22,8 +21,8 @@ static esp_amp_rpc_client_stg_t rpc_client_stg;
 
 static void cmd_add_cb(esp_amp_rpc_client_t client, esp_amp_rpc_cmd_t *cmd, void *arg)
 {
-    atomic_flag *nack = (atomic_flag *)arg;
-    atomic_flag_clear(nack);
+    volatile bool *nack = (volatile bool *)arg;
+    *nack = false;
 }
 
 /* blocking demo with response */
@@ -38,8 +37,7 @@ static int rpc_cmd_add(esp_amp_rpc_client_t client, int a, int b, int *ret, uint
     add_params_out_t out_params;
 
     /* blocking call*/
-    atomic_flag nack = ATOMIC_FLAG_INIT;
-    atomic_flag_test_and_set(&nack); /* set nack flag */
+    volatile bool nack = true;
 
     esp_amp_rpc_cmd_t cmd = {
         .cmd_id = RPC_CMD_ID_ADD,
@@ -48,14 +46,14 @@ static int rpc_cmd_add(esp_amp_rpc_client_t client, int a, int b, int *ret, uint
         .req_data = (uint8_t *) &in_params,
         .resp_data = (uint8_t *) &out_params,
         .cb = cmd_add_cb,
-        .cb_arg = &nack,
+        .cb_arg = (void *)&nack,
     };
 
     int err = esp_amp_rpc_client_execute_cmd(client, &cmd);
     if (err == ESP_AMP_RPC_OK) {
         uint32_t tic = esp_amp_platform_get_time_ms();
         /* poll response */
-        while (atomic_flag_test_and_set(&nack)) {
+        while (nack) {
             esp_amp_rpc_client_poll(client);
             if (esp_amp_platform_get_time_ms() - tic > timeout_ms) { /* wait up to timeout_ms */
                 esp_amp_rpc_client_abort_cmd(client, &cmd); /* abort command if timeout */
