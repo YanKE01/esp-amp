@@ -195,6 +195,20 @@ void esp_amp_rpc_client_deinit(esp_amp_rpc_client_t client);
 int esp_amp_rpc_client_execute_cmd(esp_amp_rpc_client_t client, esp_amp_rpc_cmd_t *cmd);
 
 /**
+ * @brief abort rpc command
+ *
+ * @note This function only aborts the local wait for the command response.
+ * It does not stop the execution on the server side.
+ *
+ * @param client client handle
+ * @param cmd rpc command
+ *
+ * @retval ESP_AMP_RPC_OK if success
+ * @retval ESP_AMP_RPC_ERR_INVALID_ARG if client or cmd is NULL
+ */
+int esp_amp_rpc_client_abort_cmd(esp_amp_rpc_client_t client, esp_amp_rpc_cmd_t *cmd);
+
+/**
  * @brief rpc client poll
  *
  * @param client client handle

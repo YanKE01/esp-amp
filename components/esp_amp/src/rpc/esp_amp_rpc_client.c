@@ -33,6 +33,7 @@ static int IRAM_ATTR client_cb(void* data, uint16_t data_len, uint16_t src_addr,
         if (client_inst->pending_cmd->cb) {
             client_inst->pending_cmd->cb(client_inst, client_inst->pending_cmd, client_inst->pending_cmd->cb_arg);
         }
+        client_inst->pending_cmd = NULL; /* clear pending command */
     }
 
     esp_amp_rpmsg_destroy(client_inst->rpmsg_dev, data);
@@ -105,20 +106,39 @@ int esp_amp_rpc_client_execute_cmd(esp_amp_rpc_client_t client, esp_amp_rpc_cmd_
     }
 
     /* construct packet */
+    esp_amp_env_enter_critical();
+    client_inst->pending_cmd = cmd;
+    uint16_t msg_id = ++client_inst->pending_id;
+    esp_amp_env_exit_critical();
+
     esp_amp_rpc_pkt_t req_pkt = {
         .cmd_id = cmd->cmd_id,
         .status = ESP_AMP_RPC_STATUS_PENDING,
-        .msg_id = ++client_inst->pending_id,
+        .msg_id = msg_id,
         .msg_len = cmd->req_len,
     };
 
     /* keep track of current command for later response */
-    client_inst->pending_cmd = cmd;
     memcpy(req_pkt_buf, &req_pkt, sizeof(esp_amp_rpc_pkt_t));
     memcpy(req_pkt_buf + sizeof(esp_amp_rpc_pkt_t), cmd->req_data, cmd->req_len);
 
     /* send packet to server */
     esp_amp_rpmsg_send_nocopy(client_inst->rpmsg_dev, &client_inst->rpmsg_ept, client_inst->server_id, req_pkt_buf, req_pkt_len);
+    return ESP_AMP_RPC_OK;
+}
+
+int esp_amp_rpc_client_abort_cmd(esp_amp_rpc_client_t client, esp_amp_rpc_cmd_t *cmd)
+{
+    esp_amp_rpc_client_inst_t *client_inst = (esp_amp_rpc_client_inst_t *)client;
+    if (client_inst == NULL || cmd == NULL) {
+        return ESP_AMP_RPC_ERR_INVALID_ARG;
+    }
+
+    esp_amp_env_enter_critical();
+    if (client_inst->pending_cmd == cmd) {
+        client_inst->pending_cmd = NULL;
+    }
+    esp_amp_env_exit_critical();
     return ESP_AMP_RPC_OK;
 }
 
