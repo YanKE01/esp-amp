@@ -114,6 +114,8 @@ int esp_amp_rpc_client_execute_cmd(esp_amp_rpc_client_t client, esp_amp_rpc_cmd_
 
 This function is non-blocking. It returns immediately after the command is sent. Return value reflects any error before the command is sent. Error related to transport or server execution will be indicated by `cmd.status`. The command result can be obtained from `cmd.resp_data` after the command is executed, if any.
 
+**NOTE**: The RPC client instance is not thread-safe. It is designed to be used by a single task/context. If you need to use the same client instance from multiple tasks, you must protect it with external synchronization mechanisms (e.g., mutex).
+
 The structure of RPC command is defined as follows:
 
 ``` c
@@ -121,28 +123,37 @@ struct esp_amp_rpc_cmd_t {
     uint16_t cmd_id; /* command ID */
     uint16_t status; /* status */
     uint16_t req_len; /* request data length */
-    uint16_t resp_len; /* response data length */
+    uint16_t resp_len; /* response data buffer length (max capacity) */
     uint8_t *req_data; /* request data */
-    uint8_t *resp_data; /* response data */
+    uint8_t *resp_data; /* response data buffer */
     esp_amp_rpc_app_cb_t cb; /* callback function */
     void *cb_arg; /* callback argument */
 };
 ```
+
+**IMPORTANT**: `resp_data` must point to a valid buffer allocated by the user, and `resp_len` must be set to the size of this buffer. The RPC client does **not** allocate memory for the response. When a response arrives, data will be copied into `resp_data` up to `resp_len` bytes. Any data exceeding `resp_len` will be truncated. Ensure that the buffer pointed to by `resp_data` remains valid until the command is completed or aborted.
 
 To make the command blocking, you can rely on any blocking APIs provided by the environment where you implement your RPC client. Here is an example of utilizing TaskNotify in FreeRTOS to make the command blocking:
 
 ``` c
 int err = esp_amp_rpc_client_execute_cmd(client, &cmd);
 if (err == ESP_AMP_RPC_OK) {
-    ulTaskNotifyTake(true, pdMS_TO_TICKS(1000)); /* wait up to 1000 ms */
-    if (cmd.status == ESP_AMP_RPC_STATUS_OK) {
-        *ret = out_params.ret;
+    if (ulTaskNotifyTake(true, pdMS_TO_TICKS(1000)) == 0) { /* wait up to 1000 ms */
+        /* IMPORTANT: abort the command if timeout occurs to prevent stack corruption from late response */
+        esp_amp_rpc_client_abort_cmd(client, &cmd);
+        printf("client: rpc cmd timeout\n");
     } else {
-        printf("client: rpc cmd failed, status: %x\n", cmd.status);
-        err = ESP_AMP_RPC_FAIL;
+        if (cmd.status == ESP_AMP_RPC_STATUS_OK) {
+            *ret = out_params.ret;
+        } else {
+            printf("client: rpc cmd failed, status: %x\n", cmd.status);
+            err = ESP_AMP_RPC_FAIL;
+        }
     }
 }
 ```
+
+**CRITICAL**: When implementing a timeout, you **must** call `esp_amp_rpc_client_abort_cmd()` if the timeout expires. The RPC command structure (often allocated on the stack) must not be modified by the RPC client callback after the function returns. `abort_cmd` ensures that any late response arriving after the timeout is safely ignored.
 
 To wake up the blocked task once the result is ready, simply notify it from the callback:
 
@@ -171,7 +182,7 @@ Once the command is executed and sent back by the server, the result can be obta
 | ESP_AMP_RPC_STATUS_EXEC_FAILED | 0xfffd | Error happened when executing command. |
 | ESP_AMP_RPC_STATUS_PENDING | 0xfffc | Command is still pending. Interpreted as timeout if the command is blocking. |
 
-You can define more status code to indicate the command execution status on server side.
+You can define more status code to indicate the command execution status on server side. It is recommended to use **positive integers** for status codes to avoid collision with negative system error codes.
 
 ### Server APIs
 
@@ -211,7 +222,7 @@ esp_amp_rpc_server_t server = esp_amp_rpc_server_init(&cfg);
 
 Things to **NOTE**:
 * One server can handle commands from multiple clients.
-* Make sure `req_buf` and `resp_buf` are available for the lifetime of the server and large enough to hold the largest request.
+* Make sure `req_buf` and `resp_buf` are valid for the lifetime of the server and large enough to hold the largest request.
 
 #### 2. Register Command Handlers
 

@@ -529,6 +529,9 @@ TEST_CASE("RPC stress test and rapid commands", "[esp_amp]")
             if (cmd.status == ESP_AMP_RPC_STATUS_OK && resp_data == req_data) {
                 success_count++;
             }
+            else if (cmd.status == ESP_AMP_RPC_STATUS_PENDING) {
+                esp_amp_rpc_client_abort_cmd(client, &cmd); /* abort command if timeout */
+            }
         }
 
         /* Small delay to prevent overwhelming */
